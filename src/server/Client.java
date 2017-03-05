@@ -283,12 +283,12 @@ public class Client {
                             opts(tmp);
                             break;
                         default:
-                            sendCommand("503 command not implement");
+                            sendCommand("502 command not implement");
                     }
                 } else if ("USER".equals(tmp.split(" ")[0])) {
                     loginStatus = login(tmp);
                 } else {
-                    sendCommand("503 command not implement");
+                    sendCommand("502 command not implement");
                 }
             }
 
