@@ -95,6 +95,7 @@ public class Client {
         while(true) {
             try {
                 pasvServerSocket = new ServerSocket(a * 256 + b);
+                System.out.println(a * 256 + b);
                 break;
             } catch (IOException e) {
                 if (b < 255) {
@@ -110,8 +111,8 @@ public class Client {
         }
 
         sendCommand("227 Entering Passive Mode (" +
-                clientSocket.getInetAddress().toString().replace('.',',').substring(1)
-                + "," + a +"," + b +").");
+                clientSocket.getLocalAddress().toString().replace('.',',').substring(1)
+                + "," + String.valueOf(a) +"," + String.valueOf(b) +").");
         try {
             pasvSocket = pasvServerSocket.accept();
             pasvServerSocket.close();
@@ -150,10 +151,15 @@ public class Client {
             sendCommand("425 Use PORT or PASV first.");
             return false;
         }
-        String filename = tmp.split(" ")[1];
+        String dir = this.rootDirectory + this.pwd;
+        if (!dir.endsWith("/")) {
+            dir += "/";
+        }
+        String filename =  dir + tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
+        System.out.println(filename);
         File file = new File(filename);
         if (file.exists()) {
-            if (file.isDirectory()) {
+            if (!file.isDirectory()) {
                 try {
                     sendCommand("150 Opening BINARY mode data connection for" + filename + "(" + file.length() + "bytes).");
                     FileInputStream fileInputStream = new FileInputStream(file);
@@ -166,6 +172,7 @@ public class Client {
                         b = ByteTool.subByte(b, 0, len);
                         this.pasvOutputStream.write(b);
                     }
+                    fileInputStream.close();
                     this.pasvSocket.close();
                     sendCommand("226 Transfer complete.");
                     return true;
@@ -173,6 +180,41 @@ public class Client {
                     return false;
                 }
             }
+        }
+        sendCommand("550 fail to open file.");
+        return false;
+    }
+
+    public boolean stor(String tmp) {
+        if (!this.pasved) {
+            sendCommand("425 Use PORT or PASV first.");
+            return false;
+        }
+        String dir = this.rootDirectory + this.pwd;
+        if (!dir.endsWith("/")) {
+            dir += "/";
+        }
+        String filename =  dir + tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
+        System.out.println(filename);
+        File file = new File(filename);
+        try {
+            sendCommand("150 Opening BINARY mode data connection for" + filename + "(" + file.length() + "bytes).");
+            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            while (true) {
+                byte[] b = new byte[102400];
+                int len = this.pasvInputStream.read(b);
+                if (len <=0 ){
+                    break;
+                }
+                b = ByteTool.subByte(b, 0, len);
+                fileOutputStream.write(b);
+            }
+            fileOutputStream.close();
+            this.pasvSocket.close();
+            sendCommand("426 Socket closed.");
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         sendCommand("550 fail to open file.");
         return false;
@@ -208,11 +250,25 @@ public class Client {
                         case "SIZE":
                             size(tmp);
                             break;
-                        case "retr":
-                            //retr(tmp);
+                        case "RETR":
+                            retr(tmp);
+                            this.pasved = false;
                             break;
-                        case "stor":
-                            //stor(tmp);
+                        case "STOR":
+                            stor(tmp);
+                            this.pasved = false;
+                            break;
+                        case "RNFR":
+                            rnfr(tmp);
+                            break;
+                        case "MKD":
+                            mkd(tmp);
+                            break;
+                        case "DELE":
+                            dele(tmp);
+                            break;
+                        case "RMD":
+                            rmd(tmp);
                             break;
                         case "TYPE":
                             sendCommand("200 set to mode.");
@@ -239,6 +295,87 @@ public class Client {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public boolean rnfr(String tmp) {
+        String dir = this.rootDirectory + this.pwd;
+        if (!dir.endsWith("/")) {
+            dir += "/";
+        }
+        String oldFilename =  dir + tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
+        System.out.println(oldFilename);
+        File oldFile = new File(oldFilename);
+        if (oldFile.exists()){
+            sendCommand("350 Ready for RNTO.");
+            String t = readReponse();
+            System.out.println(t);
+            if ("RNTO".equals(t.split(" ")[0])) {
+                String newFilename = dir + t.substring(t.indexOf(t.split(" ")[1]));
+                System.out.println(newFilename);
+                File newFile = new File(newFilename);
+                if (oldFile.renameTo(newFile)){
+                    System.out.println("Success");
+                    sendCommand("250 Rename successful.");
+                    return true;
+                }
+                System.out.println("Fail");
+            }
+        }
+        sendCommand("530 Rename failed.");
+        return false;
+    }
+
+    public boolean mkd(String tmp) {
+        String dir = this.rootDirectory + this.pwd;
+        if (!dir.endsWith("/")) {
+            dir += "/";
+        }
+        String filename =  dir + tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
+        File file = new File(filename);
+        if (!file.exists()) {
+            if (file.mkdir()) {
+                sendCommand("257 created");
+                return true;
+            }
+        }
+        sendCommand("550 Create directory operation failed.");
+        return false;
+    }
+
+    public boolean rmd(String tmp) {
+        String dir = this.rootDirectory + this.pwd;
+        if (!dir.endsWith("/")) {
+            dir += "/";
+        }
+        String filename =  dir + tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
+        File file = new File(filename);
+        if (file.exists() && file.isDirectory()) {
+            if (file.delete()) {
+                sendCommand("250 Remove directory successful.");
+                return true;
+            }
+        }
+        sendCommand("550 Remove directory failed.");
+        return false;
+    }
+
+    public boolean dele(String tmp) {
+        String dir = this.rootDirectory + this.pwd;
+        if (!dir.endsWith("/")) {
+            dir += "/";
+        }
+        String filename =  dir + tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
+        File file = new File(filename);
+        if (file.exists() && !file.isDirectory()) {
+            if (file.delete()) {
+                sendCommand("250 Delete operation successful.");
+                return true;
+            }else {
+                System.out.println("Error");
+            }
+        }
+        sendCommand("550 Delete operation failed.");
+        return false;
     }
 
     public boolean list() {
@@ -289,12 +426,12 @@ public class Client {
 
     public boolean cwd(String tmp) {
         try {
-            String newPwd = tmp.split(" ")[1];
+            String newPwd = tmp.substring(tmp.indexOf(tmp.split(" ")[1]));
             if ("../".equals(newPwd) || "..".equals(newPwd)) {
                 if (!"/".equals(pwd)) {
                     this.pwd = this.pwd.split("[^/]*$")[0];
-                    if ("".equals(this.pwd)) {
-                        this.pwd = "/";
+                    if (this.pwd.endsWith("/") && !"/".equals(this.pwd)) {
+                        this.pwd = this.pwd.substring(0, this.pwd.length() - 1);
                     }
                 }
                 sendCommand("250 Directory successfully changed.");
@@ -305,6 +442,13 @@ public class Client {
             }
             if (newPwd.endsWith("/") && !"/".equals(newPwd)) {
                 newPwd = newPwd.split("/$")[0];
+            }
+            if (!newPwd.startsWith("/")) {
+                if ("/".equals(this.pwd)){
+                    newPwd = this.pwd + newPwd;
+                } else {
+                    newPwd = this.pwd + "/" + newPwd;
+                }
             }
             File f  = new File(this.rootDirectory + newPwd);
             if (f.exists() && f.isDirectory()) {
@@ -346,4 +490,5 @@ public class Client {
         }
         return false;
     }
+
 }
