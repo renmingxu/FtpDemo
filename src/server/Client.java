@@ -1,11 +1,13 @@
 package server;
 
+import jdk.nashorn.internal.runtime.ECMAException;
 import tool.ByteTool;
+import tool.DateFormatTool;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
+import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Date;
 
 /**
  * Created by renmingxu on 2017/3/1.
@@ -14,16 +16,26 @@ public class Client {
     private Socket clientSocket;
     private InputStream cmdInputStream;
     private OutputStream cmdOutputStream;
+    private Socket pasvSocket;
+    private InputStream pasvInputStream;
+    private OutputStream pasvOutputStream;
+    private boolean pasved;
     private String charsetName;
     private boolean loginStatus;
     private ClientThread clientThread;
     private FtpServerDemo server;
+    private String pwd;
+    private String rootDirectory;
+    private String user;
 
     public Client(Socket clientSocket,FtpServerDemo server) {
         this.clientSocket = clientSocket;
-        this.charsetName = "GBK";
-        this.loginStatus = false;
         this.server = server;
+        this.charsetName = "UTF8";
+        this.loginStatus = false;
+        this.rootDirectory = server.rootDirectory;
+        this.pwd = "/";
+        this.pasved = false;
     }
     public void start() {
         this.clientThread = new ClientThread(this);
@@ -38,27 +50,132 @@ public class Client {
         }
         return false;
     }
+    private synchronized byte[] readline() {
+        byte[] b = new byte[1024000];
+        try {
+            int i = 0;
+            byte tmp;
+            for (;; i++) {
+                tmp = (byte) cmdInputStream.read();
+                if (tmp == -1) {
+                    return null;
+                }
+                b[i] = tmp;
+                if (i >= 1) {
+                    if (b[i - 1] == 13 && b[i] == 10){
+                        break;
+                    }
+                }
+            }
+            if (i >= 1) {
+                return ByteTool.subByte(b, 0, i - 1);
+            } else {
+                return null;
+            }
+        } catch (IOException e) {
+            return null;
+        }
+    }
     public synchronized String readReponse() {
         try {
-            byte[] tmp = new byte[102400];
-            int len = cmdInputStream.read(tmp);
-            if (len <= 0) {
+            byte[] tmp = readline();
+            if (tmp == null) {
                 this.close();
                 return null;
             }
-            return new String(ByteTool.subByte(tmp, 0, len), charsetName);
+            return new String(tmp, charsetName);
         } catch (IOException e) {
             e.printStackTrace();
         }
         return null;
     }
+    private synchronized boolean pasv() {
+        int a = 200,b = 0;
+        ServerSocket pasvServerSocket = null;
+        while(true) {
+            try {
+                pasvServerSocket = new ServerSocket(a * 256 + b);
+                break;
+            } catch (IOException e) {
+                if (b < 255) {
+                    b++;
+                } else {
+                    b = 0;
+                    a ++;
+                }
+                if (a * 256 + b > 65535) {
+                    return false;
+                }
+            }
+        }
 
-    private void close(){
+        sendCommand("227 Entering Passive Mode (" +
+                clientSocket.getInetAddress().toString().replace('.',',').substring(1)
+                + "," + a +"," + b +").");
+        try {
+            pasvSocket = pasvServerSocket.accept();
+            pasvServerSocket.close();
+            pasvInputStream = pasvSocket.getInputStream();
+            pasvOutputStream = pasvSocket.getOutputStream();
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public void close(){
         try {
             clientSocket.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public boolean size(String tmp) {
+        String filename = this.rootDirectory + this.pwd + tmp.split(" ")[1];
+        File file = new File(filename);
+        if (file.exists()) {
+            if (!file.isDirectory()) {
+                sendCommand("213 " + file.length());
+                return true;
+            }
+        }
+        sendCommand("550 Could get file size.");
+        return false;
+    }
+
+    public boolean retr(String tmp) {
+        if (!this.pasved) {
+            sendCommand("425 Use PORT or PASV first.");
+            return false;
+        }
+        String filename = tmp.split(" ")[1];
+        File file = new File(filename);
+        if (file.exists()) {
+            if (file.isDirectory()) {
+                try {
+                    sendCommand("150 Opening BINARY mode data connection for" + filename + "(" + file.length() + "bytes).");
+                    FileInputStream fileInputStream = new FileInputStream(file);
+                    while (true) {
+                        byte[] b = new byte[102400];
+                        int len = fileInputStream.read(b);
+                        if (len <=0 ){
+                            break;
+                        }
+                        b = ByteTool.subByte(b, 0, len);
+                        this.pasvOutputStream.write(b);
+                    }
+                    this.pasvSocket.close();
+                    sendCommand("226 Transfer complete.");
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+            }
+        }
+        sendCommand("550 fail to open file.");
+        return false;
     }
 
     public void mainLoop() {
@@ -72,11 +189,50 @@ public class Client {
                     return;
                 }
                 System.out.println(tmp);
-                switch (tmp.split("\r\n")[0].split(" ")[0]) {
-                    case "USER":
-                        this.login(tmp);
-                        break;
-                    default:
+                if (loginStatus) {
+                    switch (tmp.split(" ")[0]) {
+                        case "PASV":
+                            if (!pasv())
+                                return;
+                            this.pasved = true;
+                            break;
+                        case "LIST":
+                            list();
+                            break;
+                        case "PWD":
+                            sendCommand("257 \"" + pwd + "\" is the current directory");
+                            break;
+                        case "CWD":
+                            cwd(tmp);
+                            break;
+                        case "SIZE":
+                            size(tmp);
+                            break;
+                        case "retr":
+                            //retr(tmp);
+                            break;
+                        case "stor":
+                            //stor(tmp);
+                            break;
+                        case "TYPE":
+                            sendCommand("200 set to mode.");
+                            break;
+                        case "noop":
+                            sendCommand("200 OK.");
+                            break;
+                        case "NOOP":
+                            sendCommand("200 OK.");
+                            break;
+                        case "opts":
+                            opts(tmp);
+                            break;
+                        default:
+                            sendCommand("503 command not implement");
+                    }
+                } else if ("USER".equals(tmp.split(" ")[0])) {
+                    loginStatus = login(tmp);
+                } else {
+                    sendCommand("503 command not implement");
                 }
             }
 
@@ -84,18 +240,104 @@ public class Client {
             e.printStackTrace();
         }
     }
+
+    public boolean list() {
+        if (!this.pasved) {
+            sendCommand("425 Use PORT or PASV first.");
+            return false;
+        }
+        sendCommand("150 Here comes the directory listing.");
+        File file = new File(this.rootDirectory + this.pwd);
+        File [] files = file.listFiles();
+        for (File f : files) {
+            String filetype = "";
+            if (f.isDirectory()) {
+                filetype += "d";
+            } else {
+                filetype += "-";
+            }
+            filetype += "rwx------";
+            String result = filetype + " " +
+                    this.user + " " +
+                    this.user + " " +
+                    f.length() + " " +
+                    DateFormatTool.dateString(new Date(file.lastModified())) + " " +
+                    f.getName() + "\r\n";
+            try {
+                pasvOutputStream.write(result.getBytes());
+            } catch (IOException e) {
+            }
+        }
+        try {
+            pasvSocket.close();
+        } catch (IOException e) {
+        }
+        this.pasved = false;
+        sendCommand("226 Directory send OK.");
+        return true;
+    }
+
+    public boolean opts(String tmp) {
+        if ("opts utf8 on".equals(tmp)) {
+            sendCommand("200 Always in UTF8 mode.");
+            return true;
+        } else {
+            sendCommand("503 command not implement");
+            return true;
+        }
+    }
+
+    public boolean cwd(String tmp) {
+        try {
+            String newPwd = tmp.split(" ")[1];
+            if ("../".equals(newPwd) || "..".equals(newPwd)) {
+                if (!"/".equals(pwd)) {
+                    this.pwd = this.pwd.split("[^/]*$")[0];
+                    if ("".equals(this.pwd)) {
+                        this.pwd = "/";
+                    }
+                }
+                sendCommand("250 Directory successfully changed.");
+                return true;
+            } else if (newPwd.contains("../")) {
+                sendCommand("550 Failed to change directory.");
+                return false;
+            }
+            if (newPwd.endsWith("/") && !"/".equals(newPwd)) {
+                newPwd = newPwd.split("/$")[0];
+            }
+            File f  = new File(this.rootDirectory + newPwd);
+            if (f.exists() && f.isDirectory()) {
+                this.pwd = newPwd;
+                sendCommand("250 Directory successfully changed.");
+            } else {
+                sendCommand("550 Failed to change directory.");
+                return false;
+            }
+            if (!pwd.startsWith("/")) {
+                pwd = "/" + pwd;
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public synchronized boolean login(String tmp){
         String user;
         String pass;
         if (tmp.split(" ").length == 2) {
-            user = tmp.split(" ")[1].split("\r\n")[0];
+            user = tmp.split(" ")[1];
             System.out.println("asdf");
             this.sendCommand("331 Please specify the password.");
             String t = this.readReponse();
             if ("PASS".equals(t.split(" ")[0]) && t.split(" ").length == 2) {
-                pass = t.split(" ")[1].split("\r\n")[0];
+                pass = t.split(" ")[1];
+                System.out.println("|" + user + "|" + pass + "|");
                 if (this.server.login(user, pass)) {
                     this.sendCommand("230 Login successful.");
+                    this.user = user;
                     return true;
                 } else {
                     this.sendCommand("530 Not logged in, user or password incorrect!");

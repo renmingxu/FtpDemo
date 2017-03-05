@@ -13,5 +13,6 @@ public class ClientThread extends Thread {
     @Override
     public void run() {
         this.client.mainLoop();
+        this.client.close();
     }
 }

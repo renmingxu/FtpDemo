@@ -1,6 +1,7 @@
 package server;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -10,13 +11,15 @@ import java.util.ArrayList;
  */
 public class FtpServerDemo {
     private int port;
-    private String rootDirectory;
+    String rootDirectory;
     private String user;
     private String pass;
 
     private ArrayList<Client> clients;
 
     private ServerSocket serverSocket;
+
+
 
     public FtpServerDemo(int port, String rootDirectory, String user, String pass) {
         this.port = port;
@@ -30,6 +33,7 @@ public class FtpServerDemo {
             this.serverSocket = new ServerSocket(port);
             while (true) {
                 Socket clientSocket = this.serverSocket.accept();
+                System.out.println(clientSocket.getInetAddress().toString().replace('.',',').substring(1));
                 Client client = new Client(clientSocket, this);
                 this.clients.add(client);
                 client.start();

@@ -6,7 +6,7 @@ package server;
 public class Main {
 
     public static void main(String[] args) {
-        FtpServerDemo ftpServer = new FtpServerDemo(21,"C:\\" ,"ren","ren");
+        FtpServerDemo ftpServer = new FtpServerDemo(21,"D:\\ftp\\" ,"ren","ren");
         ftpServer.start();
     }
 }

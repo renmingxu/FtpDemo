@@ -49,6 +49,16 @@ public class Main {
                 case "list":
                     System.out.println(ftpClient.list());
                     break;
+                case "pwd":
+                    System.out.println(ftpClient.pwd());
+                    break;
+                case "download":
+                    System.out.print("Filename:");
+                    String filenamedownload = input.next();
+                    System.out.print("Local Filename:");
+                    String localFilenamedownload = input.next();
+                    System.out.println(ftpClient.download(filenamedownload, localFilenamedownload));
+                    break;
                 case "retr":
                     System.out.print("Filename:");
                     String filenameRetr = input.next();
@@ -63,13 +73,22 @@ public class Main {
                     String localFilenameStor = input.next();
                     System.out.println(ftpClient.stor(filenameStor, localFilenameStor));
                     break;
+                case "rename":
+                    System.out.print("Old Filename:");
+                    String filenameRename = input.next();
+                    System.out.print("New Filename:");
+                    String newFileRename = input.next();
+                    System.out.println(ftpClient.rename(filenameRename, newFileRename));
+                    break;
                 case "size":
-                    System.out.print("Filename:");
                     String filenameSize = input.next();
                     System.out.println(ftpClient.size(filenameSize));
                     break;
+                case "mkd":
+                    String filenameMkd = input.next();
+                    System.out.println(ftpClient.mkd(filenameMkd));
+                    break;
                 case "cwd":
-                    System.out.print("Directory");
                     String directoryName = input.next();
                     System.out.println(ftpClient.cwd(directoryName));
                 default:
