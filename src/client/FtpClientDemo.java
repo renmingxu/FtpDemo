@@ -25,7 +25,7 @@ public class FtpClientDemo {
         this.port = port;
         this.user = user;
         this.pass = pass;
-        this.charsetName = "GBK";
+        this.charsetName = "UTF8";
     }
 
     public boolean login() {
@@ -138,7 +138,7 @@ public class FtpClientDemo {
                 if (len <= 0) {
                     break;
                 }
-                result += new String(ByteTool.subByte(tmp, 0, len), "GBK");
+                result += new String(ByteTool.subByte(tmp, 0, len), this.charsetName);
             }
             dataSocket.close();
             String sss = readResponse();
@@ -273,7 +273,7 @@ public class FtpClientDemo {
             }
             dataSocket.close();
             String ss = readResponse();
-            if ("226".equals(ss.split(" ")[0])) {
+            if (ss.startsWith("226") || ss.startsWith("426")) {
                 return true;
             } else {
                 return false;
@@ -291,6 +291,9 @@ public class FtpClientDemo {
         for (String l :
                 lslist) {
             String[] llist = l.split("( ){1,}");
+            if (l.length() <= 1) {
+                break;
+            }
             String filename = l.substring(l.indexOf(llist[8]));
             String filetype = llist[0].substring(0,1);
             if (filename.equals(file)) {
@@ -304,7 +307,70 @@ public class FtpClientDemo {
                 }
             }
         }
-        return true;
+        return result;
+    }
+
+
+    public boolean delefile (String filename) {
+        String result = sendCommand("DELE " + filename);
+        if (result.startsWith("250")) {
+            return true;
+        }
+        return false;
+    }
+
+    public boolean deledir (String dirname) {
+        String oldPwd = pwd();
+        cwd(dirname);
+        String ls = list();
+        String[] lslist = ls.split("\r\n");
+        for (String l :
+                lslist) {
+            if ("".equals(l))
+                continue;
+            String[] llist = l.split("( ){1,}");
+            String filename = l.substring(l.indexOf(llist[8]));
+            String filetype = llist[0].substring(0,1);
+            if ("-".equals(filetype)) {
+                delefile(filename);
+            } else if ("d".equals(filetype)) {
+                deledir(filename);
+            } else {
+                return false;
+            }
+        }
+        cwd(oldPwd);
+        String  result = sendCommand("RMD " + dirname);
+        if (result.startsWith("250")) {
+            return true;
+        }
+        return false;
+    }
+
+    public boolean dele(String file) {
+        String ls = list();
+        String[] lslist = ls.split("\r\n");
+        boolean result = false;
+        for (String l :
+                lslist) {
+            String[] llist = l.split("( ){1,}");
+            if (l.length() <= 1) {
+                break;
+            }
+            String filename = l.substring(l.indexOf(llist[8]));
+            String filetype = llist[0].substring(0,1);
+            if (filename.equals(file)) {
+                result = true;
+                if ("-".equals(filetype)) {
+                    return delefile(file);
+                } else if ("d".equals(filetype)) {
+                    return deledir(file);
+                } else {
+                    return false;
+                }
+            }
+        }
+        return result;
     }
 
     public boolean stordir(String filename, String localFilename) {
@@ -347,7 +413,7 @@ public class FtpClientDemo {
 
     public boolean mkd(String directoryName) {
         String result =  sendCommand("MKD " + directoryName);
-        if ("250".equals(result.split(" ")[0])) {
+        if (result.startsWith("257") || result.startsWith("250")) {
             return true;
         }
         return false;

@@ -15,6 +15,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.UnsupportedEncodingException;
 import java.util.*;
 
 /**
@@ -29,8 +30,14 @@ public class FtpFrame extends JFrame{
     public JButton loginBtn;
     public JButton downloadBtn;
     public JButton uploadBtn;
+    public JButton upperBtn;
     public JButton openBtn;
+    public JButton deleBtn;
+    public JButton updateBtn;
+    public String host;
+    public int port;
     FtpClientDemo ftpClient;
+
     public FtpFrame() {
         this.setBounds(300, 200, 700, 500);
         this.setResizable(false);
@@ -64,25 +71,10 @@ public class FtpFrame extends JFrame{
         loginBtn = new JButton("登陆");
         loginBtn.setFont(font);
         loginBtn.setBounds(600, 5, 90, 30);
-        loginBtn.addMouseListener(new MouseAdapter() {
+        loginBtn.addActionListener(new ActionListener() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 1) {
-                    String user = FtpFrame.this.userField.getText();
-                    String pass = new String(FtpFrame.this.passField.getPassword());
-                    String addr = FtpFrame.this.addrField.getText();
-                    if ("ftp://".equals(addr.substring(0,6))) {
-                        String host = addr.split("/")[2].split(":")[0];
-                        System.out.println("host:" + host);
-                        int port = 21;
-                        if (addr.split("/")[2].contains(":")) {
-                            port = Integer.valueOf(addr.split("/")[2].split(":")[1]);
-                        }
-                        ftpClient = new FtpClientDemo(host, port, user, pass);
-                        System.out.println(ftpClient.login());
-                        updatelist();
-                    }
-                }
+            public void actionPerformed(ActionEvent e) {
+                login();
             }
         });
         panel.add(loginBtn);
@@ -92,22 +84,7 @@ public class FtpFrame extends JFrame{
         openBtn.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String select = (String) FtpFrame.this.jList.getSelectedValue();
-                if (select == null) {
-                    JOptionPane.showMessageDialog(null, "请选择一个文件夹");
-                    return;
-                }
-                if (select.length() <= 1) {
-                    return;
-                }
-                if ("d".equals(select.substring(0,1))) {
-                    String dir =  select.split("( ){1,}")[8];
-                    System.out.println(dir);
-                    ftpClient.cwd(dir);
-                    updatelist();
-                } else {
-                    JOptionPane.showMessageDialog(null, "不能打开一个文件，你可以点击下载");
-                }
+                open();
             }
         });
         panel.add(openBtn);
@@ -117,31 +94,50 @@ public class FtpFrame extends JFrame{
         downloadBtn.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String select = (String) FtpFrame.this.jList.getSelectedValue();
-                if (select == null) {
-                    JOptionPane.showMessageDialog(null, "请选择一个文件夹或文件");
-                    return;
-                }
-                if (select.length() <= 1) {
-                    return;
-                }
-                JFileChooser fd = new JFileChooser();
-                fd.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                fd.showOpenDialog(null);
-                File f = fd.getSelectedFile();
-                if(f != null){
-                    String filename =  select.split("( ){1,}")[8];
-                    if (ftpClient.download(filename, f.getAbsolutePath() + "/" + filename)){
-                        JOptionPane.showMessageDialog(null, "下载完成");
-                    } else {
-                        JOptionPane.showMessageDialog(null, "下载失败");
-                    }
-                }
+                download();
             }
         });
         panel.add(downloadBtn);
+        upperBtn = new JButton("上一级");
+        upperBtn.setFont(font);
+        upperBtn.setBounds(600, 150, 90, 30);
+        upperBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                upper();
+            }
+        });
+        panel.add(upperBtn);
+        deleBtn = new JButton("删除");
+        deleBtn.setFont(font);
+        deleBtn.setBounds(600, 200, 90, 30);
+        deleBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dele();
+            }
+        });
+        panel.add(deleBtn);
+        updateBtn = new JButton("刷新");
+        updateBtn.setFont(font);
+        updateBtn.setBounds(600, 250, 90,30);
+        updateBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                updatelist();
+            }
+        });
+        panel.add(updateBtn);
         filesList = new DefaultListModel();
         jList = new JList(filesList);
+        jList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    open();
+                }
+            }
+        });
         JScrollPane ps = new JScrollPane(jList);
         ps.setBounds(5, 40, 580, 400);
         panel.add(ps);
@@ -150,6 +146,7 @@ public class FtpFrame extends JFrame{
         this.setVisible(true);
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
     }
+
     public void drag(JScrollPane panel) {
         new DropTarget(panel, DnDConstants.ACTION_COPY_OR_MOVE, new DropTargetAdapter()
         {
@@ -163,9 +160,15 @@ public class FtpFrame extends JFrame{
                         dtde.acceptDrop(DnDConstants.ACTION_COPY_OR_MOVE);//接收拖拽来的数据
                         java.util.List<File> list =  (java.util.List<File>) (dtde.getTransferable().getTransferData(DataFlavor.javaFileListFlavor));
                         String temp="";
+                        boolean flag = true;
                         for(File file:list) {
-                            temp += file.getAbsolutePath() + ";\n";
-                            ftpClient.upload(file.getName(), file.getAbsolutePath());
+                            temp += file.getAbsolutePath() + ";";
+                            if (ftpClient.upload(file.getName(), file.getAbsolutePath())) {
+                                System.out.println(file.getAbsoluteFile());
+                                temp += "上传成功\n";
+                            } else {
+                                temp += "上传失败\n";
+                            }
                         }
                         JOptionPane.showMessageDialog(null, temp);
                         updatelist();
@@ -183,15 +186,129 @@ public class FtpFrame extends JFrame{
             }
         });
     }
+
     public void updatelist() {
         String[] list = ftpClient.list().split("\r\n");
         FtpFrame.this.filesList.removeAllElements();
         for (String l:list) {
+            System.out.println(l);
             if (l != null) {
                 FtpFrame.this.filesList.addElement(l);
             }
         }
+        if (port != 21) {
+            this.addrField.setText("ftp://" + host + ":" + port + ftpClient.pwd());
+        } else {
+            this.addrField.setText("ftp://" + host + ftpClient.pwd());
+        }
     }
+
+    public void login() {
+        String user = FtpFrame.this.userField.getText();
+        String pass = new String(FtpFrame.this.passField.getPassword());
+        String addr = FtpFrame.this.addrField.getText();
+        if ("ftp://".equals(addr.substring(0,6))) {
+            host = addr.split("/")[2].split(":")[0];
+            System.out.println("host:" + host);
+            port = 21;
+            if (addr.split("/")[2].contains(":")) {
+                port = Integer.valueOf(addr.split("/")[2].split(":")[1]);
+            }
+            ftpClient = new FtpClientDemo(host, port, user, pass);
+            System.out.println(ftpClient.login());
+            updatelist();
+            JOptionPane.showMessageDialog(null, "登陆成功");
+        }
+    }
+
+    public void open(){
+        String select = (String) FtpFrame.this.jList.getSelectedValue();
+        if (select == null) {
+            JOptionPane.showMessageDialog(null, "请选择一个文件夹");
+            return;
+        }
+        if (select.length() <= 1) {
+            return;
+        }
+        if ("d".equals(select.substring(0,1))) {
+            String dir =  select.split("( ){1,}")[8];
+            System.out.println(dir);
+            ftpClient.cwd(dir);
+            updatelist();
+        } else {
+            JOptionPane.showMessageDialog(null, "不能打开一个文件，你可以点击下载");
+        }
+    }
+
+    public void dele(){
+        Object[] selects = FtpFrame.this.jList.getSelectedValues();
+        String result = "";
+        if (selects.length == 0) {
+            JOptionPane.showMessageDialog(null, "请选择一个文件夹或文件");
+            return;
+        }
+        for (Object selecto: selects) {
+            String select = (String)selecto;
+            if (select.length() <= 1) {
+                return;
+            }
+            String filename = select.substring(select.indexOf(select.split("( ){1,}")[8]));
+            System.out.println(filename);
+            if (ftpClient.dele(filename)) {
+                result += filename + ";删除完成\n";
+            } else {
+                result += filename + ";删除失败\n";
+
+            }
+        }
+        JOptionPane.showMessageDialog(null, result);
+        updatelist();
+    }
+
+    public void download() {
+        Object[] selects =  FtpFrame.this.jList.getSelectedValues();
+        if (selects.length == 0) {
+            JOptionPane.showMessageDialog(null, "请选择一个文件夹或文件");
+            return;
+        }
+        JFileChooser fd = new JFileChooser();
+        fd.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fd.showOpenDialog(null);
+        File f = fd.getSelectedFile();
+        if(f != null){
+            String result = "";
+            for (Object selecto: selects) {
+                String select = (String)selecto;
+                String filename = select.substring(select.indexOf(select.split("( ){1,}")[8]));
+                if (select.length() <= 1) {
+                    return;
+                }
+                if (ftpClient.download(filename, f.getAbsolutePath() + "/" + filename)) {
+                    result += filename + ";下载完成\n";
+                } else {
+                    result += filename + ";下载失败\n";
+                }
+            }
+            JOptionPane.showMessageDialog(null, result);
+        }
+        updatelist();
+    }
+
+    public void upper() {
+        String pwd = ftpClient.pwd();
+        if ("/".equals(pwd)) {
+            JOptionPane.showMessageDialog(null, "这是根目录，没有上一级");
+            return;
+        }
+        if (pwd.endsWith("/")) {
+            pwd = pwd.split("/$")[0];
+        }
+        pwd = pwd.split("[^/]*$")[0];
+        ftpClient.cwd(pwd);
+        updatelist();
+    }
+
+
     public static void main(String[] args) {
         FtpFrame ftpFrame = new FtpFrame();
 

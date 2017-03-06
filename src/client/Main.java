@@ -99,6 +99,9 @@ public class Main {
                 case "cwd":
                     String directoryName = input.next();
                     System.out.println(ftpClient.cwd(directoryName));
+                case "del":
+                    String delName = input.next();
+                    System.out.println(ftpClient.dele(delName));
                 default:
             }
         }

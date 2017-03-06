@@ -401,7 +401,7 @@ public class Client {
                 filetype += "-";
             }
             filetype += "rwx------";
-            String result = filetype + " " +
+            String result = filetype + " " + "1 " +
                     this.user + " " +
                     this.user + " " +
                     f.length() + " " +
