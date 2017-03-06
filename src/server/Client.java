@@ -37,10 +37,12 @@ public class Client {
         this.pwd = "/";
         this.pasved = false;
     }
+
     public void start() {
         this.clientThread = new ClientThread(this);
         this.clientThread.start();
     }
+
     public synchronized boolean sendCommand(String cmd) {
         try {
             cmdOutputStream.write((cmd + "\r\n").getBytes(charsetName));
@@ -50,6 +52,7 @@ public class Client {
         }
         return false;
     }
+
     private synchronized byte[] readline() {
         byte[] b = new byte[1024000];
         try {
@@ -76,6 +79,7 @@ public class Client {
             return null;
         }
     }
+
     public synchronized String readReponse() {
         try {
             byte[] tmp = readline();
@@ -89,6 +93,7 @@ public class Client {
         }
         return null;
     }
+
     private synchronized boolean pasv() {
         int a = 200,b = 0;
         ServerSocket pasvServerSocket = null;
@@ -282,6 +287,8 @@ public class Client {
                         case "opts":
                             opts(tmp);
                             break;
+                        case "QUIT":
+                            return;
                         default:
                             sendCommand("502 command not implement");
                     }

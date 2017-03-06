@@ -31,6 +31,7 @@ public class Main {
                 }
             }
         }
+        boolean flag = true;
         while (true) {
             System.out.println("\n\n1.list \n" +
                     "2.size\n" +
@@ -43,8 +44,8 @@ public class Main {
             System.out.println(cmd);
             switch (cmd) {
                 case "exit":
-                    System.out.println(ftpClient.quit());
-                    System.exit(0);
+                    ftpClient.quit();
+                    flag = false;
                     break;
                 case "list":
                     System.out.println(ftpClient.list());
@@ -72,6 +73,13 @@ public class Main {
                     System.out.print("Local Filename:");
                     String localFilenameStor = input.next();
                     System.out.println(ftpClient.stor(filenameStor, localFilenameStor));
+                    break;
+                case "upload":
+                    System.out.print("Filename:");
+                    String filenameUpload = input.next();
+                    System.out.print("Local Filename:");
+                    String localFilenameUpload = input.next();
+                    System.out.println(ftpClient.upload(filenameUpload, localFilenameUpload));
                     break;
                 case "rename":
                     System.out.print("Old Filename:");

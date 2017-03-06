@@ -8,7 +8,7 @@ import java.io.File;
 public class Main {
 
     public static void main(String[] args) {
-        FtpServerDemo ftpServer = new FtpServerDemo(21,"/home/ftp/" ,"ren","ren");
+        FtpServerDemo ftpServer = new FtpServerDemo(21,"d:\\ftp\\" ,"ren","ren");
         ftpServer.start();
     }
 }

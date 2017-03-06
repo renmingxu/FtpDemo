@@ -27,6 +27,7 @@ public class FtpClientDemo {
         this.pass = pass;
         this.charsetName = "GBK";
     }
+
     public boolean login() {
         try {
             byte[] tmp = new byte[10240];
@@ -46,6 +47,7 @@ public class FtpClientDemo {
         }
         return false;
     }
+
     public Socket pasv() {
         try {
             byte[] tmp = new byte[10240];
@@ -63,6 +65,7 @@ public class FtpClientDemo {
         }
         return null;
     }
+
     public synchronized String sendCommand(String cmd) {
         byte[] tmp = new byte[10240];
         int len = 0;
@@ -75,6 +78,7 @@ public class FtpClientDemo {
         }
         return null;
     }
+
     private synchronized byte[] readline() {
         byte[] b = new byte[1024000];
         try {
@@ -101,6 +105,7 @@ public class FtpClientDemo {
             return null;
         }
     }
+
     public synchronized String readResponse() {
         byte[] tmp = new byte[10240];
         int len = 0;
@@ -113,37 +118,39 @@ public class FtpClientDemo {
         }
         return null;
     }
+
     public String list() {
-            try {
-                byte[] tmp;
-                Socket dataSocket = pasv();
-                if (dataSocket == null){
-                    System.out.println("Error");
-                    return "";
-                }
-                InputStream dataInputStream = dataSocket.getInputStream();
-                OutputStream dataOutputStream = dataSocket.getOutputStream();
-                tmp = new byte[10240];
-                String ss = sendCommand("LIST");
-                String result = "";
-                while (true) {
-                    tmp = new byte[102400];
-                    int len = dataInputStream.read(tmp);
-                    if (len <= 0) {
-                        break;
-                    }
-                    result += new String(ByteTool.subByte(tmp, 0, len), "GBK");
-                }
-                dataSocket.close();
-                String sss = readResponse();
-                if ("226".equals(sss.split(" ")[0])) {
-                    return result;
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+        try {
+            byte[] tmp;
+            Socket dataSocket = pasv();
+            if (dataSocket == null){
+                System.out.println("Error");
+                return "";
             }
-            return "";
+            InputStream dataInputStream = dataSocket.getInputStream();
+            OutputStream dataOutputStream = dataSocket.getOutputStream();
+            tmp = new byte[10240];
+            String ss = sendCommand("LIST");
+            String result = "";
+            while (true) {
+                tmp = new byte[102400];
+                int len = dataInputStream.read(tmp);
+                if (len <= 0) {
+                    break;
+                }
+                result += new String(ByteTool.subByte(tmp, 0, len), "GBK");
+            }
+            dataSocket.close();
+            String sss = readResponse();
+            if ("226".equals(sss.split(" ")[0])) {
+                return result;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return "";
     }
+
     public int size(String filename) {
         String result =  sendCommand("SIZE " + filename);
         if ("213".equals(result.split(" ")[0])) {
@@ -151,6 +158,7 @@ public class FtpClientDemo {
         }
         return -1;
     }
+
     public String pwd() {
         String result = sendCommand("PWD");
         if ("257".equals(result.split(" ")[0])) {
@@ -158,21 +166,21 @@ public class FtpClientDemo {
         }
         return "";
     }
-    public String quit() {
+
+    public void quit() {
         try {
             byte[] tmp;
             tmp = new byte[10240];
             synchronized (cmdSocket) {
                 cmdOutputStream.write(("QUIT").getBytes());
-                cmdInputStream.read(tmp);
             }
-            String result =  new String(tmp, "GBK");
-            return result;
+            return;
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return "";
+        return;
     }
+
     public boolean retr(String filename, String localFilename) {
         try {
             byte[] tmp;
@@ -207,6 +215,7 @@ public class FtpClientDemo {
         }
         return false;
     }
+
     private boolean retrdir(String dirname, String localDirname) {
         String oldPwd = pwd();
         cwd(dirname);
@@ -230,16 +239,17 @@ public class FtpClientDemo {
             String filename = l.substring(l.indexOf(llist[8]));
             String filetype = llist[0].substring(0,1);
             if ("-".equals(filetype)) {
-                    retr(filename, localDirname + "\\" + filename);
-                } else if ("d".equals(filetype)) {
-                    retrdir(filename,localDirname + "\\" + filename);
-                } else {
-                    return false;
-                }
+                retr(filename, localDirname + "\\" + filename);
+            } else if ("d".equals(filetype)) {
+                retrdir(filename,localDirname + "\\" + filename);
+            } else {
+                return false;
+            }
         }
         cwd(oldPwd);
         return true;
     }
+
     public boolean stor(String filename, String localFilename) {
         try {
             byte[] tmp;
@@ -273,6 +283,7 @@ public class FtpClientDemo {
         }
         return false;
     }
+
     public boolean download(String file, String localFile) {
         String ls = list();
         String[] lslist = ls.split("\r\n");
@@ -295,6 +306,37 @@ public class FtpClientDemo {
         }
         return true;
     }
+
+    public boolean stordir(String filename, String localFilename) {
+        String oldPwd = pwd();
+        File localFile = new File(localFilename);
+        if (localFile.isDirectory()) {
+            if (!mkd(filename)){
+                return false;
+            }
+            cwd(filename);
+            File[] fileLists = localFile.listFiles();
+            for (File file : fileLists) {
+                if (file.isDirectory()) {
+                    stordir(file.getName(), localFile + "/" +file.getName());
+                } else {
+                    stor(file.getName(), localFile + "/" + file.getName());
+                }
+            }
+        }
+        cwd(oldPwd);
+        return true;
+    }
+
+    public boolean upload(String filename, String localFilename) {
+        File localFile = new File(localFilename);
+        if (localFile.isDirectory()){
+            return stordir(filename, localFilename);
+        } else {
+            return stor(filename,localFilename);
+        }
+    }
+
     public String cwd(String directoryName) {
         String result =  sendCommand("CWD " + directoryName);
         if ("250".equals(result.split(" ")[0])) {
@@ -302,6 +344,7 @@ public class FtpClientDemo {
         }
         return "";
     }
+
     public boolean mkd(String directoryName) {
         String result =  sendCommand("MKD " + directoryName);
         if ("250".equals(result.split(" ")[0])) {
@@ -309,6 +352,7 @@ public class FtpClientDemo {
         }
         return false;
     }
+
     public boolean rename(String oldName, String newName) {
         String tmp = sendCommand("RNFR " + oldName);
         if ("350".equals(tmp.split(" ")[0])) {
